@@ -16,6 +16,12 @@ const WORKFLOW_ID   = parseInt(process.env.WORKFLOW_ID || '0');
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+function chunk<T>(arr: T[], size: number): T[][] {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+}
+
 // ─── COUNTRY CODE HELPER ─────────────────────────────────────────────────────
 
 function getIsoCode(location: string | null): string | null {
@@ -78,6 +84,24 @@ async function updateWorkflowSummary(
     else console.log(`   📊 Workflow summary logged to Supabase`);
 }
 
+// ─── PRE-LOAD TALENT MAP ─────────────────────────────────────────────────────
+// Chunks the .in() query to avoid URL length limits (PostgREST breaks ~500+ UUIDs)
+
+async function loadTalentMap(talentIds: string[]): Promise<Map<string, any>> {
+    const map = new Map<string, any>();
+    if (!talentIds.length) return map;
+
+    for (const ids of chunk(talentIds, 200)) {
+        const { data, error } = await supabase
+            .from('hb_talent')
+            .select('id, name, image, biography, birth_location, birth_country, date_birthdate, date_deathdate')
+            .in('id', ids);
+        if (error) { console.warn(`   ⚠️  Talent pre-load chunk error: ${error.message}`); continue; }
+        for (const t of data || []) map.set(t.id, t);
+    }
+    return map;
+}
+
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 
 async function run() {
@@ -86,11 +110,13 @@ async function run() {
 
     const staleThreshold = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch stale IMDB social rows — oldest check_imdb_enrichment first
+    // Only fetch valid person IDs (nm prefix) — skip tt (titles) and ch (characters)
+    // Priority: never enriched first (detailed_array IS NULL), then stale
     const { data: socials, error } = await supabase
         .from('hb_socials')
         .select('id, identifier, name, linked_talent, check_imdb_enrichment')
         .eq('type', 'IMDB')
+        .like('identifier', 'nm%')
         .or(`check_imdb_enrichment.is.null,check_imdb_enrichment.lt.${staleThreshold}`)
         .order('check_imdb_enrichment', { ascending: true, nullsFirst: true })
         .limit(LIMIT);
@@ -103,15 +129,16 @@ async function run() {
         return;
     }
 
-    console.log(`   Found ${socials.length} stale IMDb profiles.\n`);
+    // Prioritise records without any data at all (never enriched) over re-enriching old ones
+    const neverEnriched = socials.filter(s => s.check_imdb_enrichment === null);
+    const staleEnriched = socials.filter(s => s.check_imdb_enrichment !== null);
+    const ordered = [...neverEnriched, ...staleEnriched].slice(0, LIMIT);
 
-    // Pre-load linked talent records in one batch query
-    const talentIds = [...new Set(socials.map(s => s.linked_talent).filter(Boolean))];
-    const { data: talents } = await supabase
-        .from('hb_talent')
-        .select('id, name, image, biography, birth_location, birth_country, date_birthdate, date_deathdate, stats_height')
-        .in('id', talentIds);
-    const talentMap = new Map(talents?.map(t => [t.id, t]) || []);
+    console.log(`   Found ${ordered.length} profiles (${neverEnriched.length} never enriched, ${staleEnriched.length} stale).\n`);
+
+    // Pre-load linked talent in chunked batches to avoid URL length limits
+    const talentIds = [...new Set(ordered.map(s => s.linked_talent).filter(Boolean))];
+    const talentMap = await loadTalentMap(talentIds);
     console.log(`   ✅ Pre-loaded ${talentMap.size} linked talent records\n`);
 
     // Pre-load valid country codes
@@ -122,18 +149,18 @@ async function run() {
     const talentUpdates: any[] = [];
     let enrichedCount = 0, failedCount = 0;
 
-    // Process in parallel batches
-    for (let i = 0; i < socials.length; i += CONCURRENCY) {
-        const chunk = socials.slice(i, i + CONCURRENCY);
+    // Process in parallel batches of CONCURRENCY
+    for (let i = 0; i < ordered.length; i += CONCURRENCY) {
+        const batch = ordered.slice(i, i + CONCURRENCY);
 
-        await Promise.all(chunk.map(async (social) => {
+        await Promise.all(batch.map(async (social) => {
             console.log(`🔍 ${social.name || social.identifier} (${social.identifier})`);
             const now = new Date().toISOString();
 
             const imdbData = await fetchImdbData(social.identifier);
 
             if (!imdbData) {
-                // Stamp so we don't retry every run
+                // Stamp so we don't retry on every run
                 socialUpdates.push({ id: social.id, check_imdb_enrichment: now });
                 failedCount++;
                 return;
@@ -150,9 +177,9 @@ async function run() {
                 updated_at:            now,
             });
             enrichedCount++;
-            console.log(`   ✅ Enriched: ${imdbData.name || social.identifier}`);
+            console.log(`   ✅ ${imdbData.name || social.identifier}`);
 
-            // Hydrate hb_talent — only fill blank fields
+            // Hydrate hb_talent — only fill fields that are currently blank
             if (social.linked_talent && talentMap.has(social.linked_talent)) {
                 const t = talentMap.get(social.linked_talent)!;
                 const tUpdate: any = { id: t.id };
@@ -163,7 +190,7 @@ async function run() {
                 if (!t.birth_location && imdbData.birthLocation) { tUpdate.birth_location = imdbData.birthLocation; changed = true; }
                 if (!t.date_birthdate && imdbData.birthDate)     { tUpdate.date_birthdate = imdbData.birthDate;     changed = true; }
                 if (!t.date_deathdate && imdbData.deathDate)     { tUpdate.date_deathdate = imdbData.deathDate;     changed = true; }
-                if (!t.stats_height   && imdbData.height)        { tUpdate.stats_height   = imdbData.height;        changed = true; }
+                // Note: stats_height is numeric but IMDb returns a string (e.g. "5' 11\"") — skip to avoid type errors
 
                 if (!t.birth_country && imdbData.birthLocation) {
                     const iso = getIsoCode(imdbData.birthLocation);
@@ -175,7 +202,6 @@ async function run() {
 
                 if (changed) {
                     talentUpdates.push(tUpdate);
-                    console.log(`   ✨ Queued talent hydration: ${t.id}`);
                 }
             }
         }));
@@ -183,7 +209,7 @@ async function run() {
         await sleep(SLEEP_MS);
     }
 
-    // ── Batch apply all updates ──────────────────────────────────────────────
+    // ── Batch apply all updates in one round-trip each ───────────────────────
     console.log(`\n💾 Applying batch updates...`);
 
     if (socialUpdates.length > 0) {
@@ -193,14 +219,17 @@ async function run() {
     }
 
     if (talentUpdates.length > 0) {
-        const { error: tErr } = await supabase.from('hb_talent').upsert(talentUpdates);
-        if (tErr) console.error(`❌ Talent batch error: ${tErr.message}`);
-        else console.log(`   ✅ Hydrated ${talentUpdates.length} talent profiles`);
+        // Chunk talent upserts to avoid payload limits
+        for (const ch of chunk(talentUpdates, 200)) {
+            const { error: tErr } = await supabase.from('hb_talent').upsert(ch);
+            if (tErr) console.error(`❌ Talent batch error: ${tErr.message}`);
+        }
+        console.log(`   ✅ Hydrated ${talentUpdates.length} talent profiles`);
     }
 
     const durationSecs = Math.round((Date.now() - runStart) / 1000);
     const summaryObj = {
-        profiles_processed: socials.length,
+        profiles_processed: ordered.length,
         enriched:           enrichedCount,
         failed:             failedCount,
         talent_hydrated:    talentUpdates.length,
