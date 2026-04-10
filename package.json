@@ -1,0 +1,18 @@
+{
+  "name": "yl-hb-imdb",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "imdb-enrichment": "ts-node --transpile-only src/imdb-enrichment.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1",
+    "i18n-iso-countries": "^7.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
