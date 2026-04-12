@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       profile_limit:
-        description: "Max profiles to scrape (default: 50)"
+        description: "Max profiles to scrape (0 = all)"
         required: false
-        default: "50"
+        default: "0"
         type: string
       concurrency:
         description: "Parallel profiles (default: 3)"
@@ -20,7 +20,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120
 
     steps:
       - name: Notify Supabase — start
@@ -60,7 +60,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          PROFILE_LIMIT: ${{ github.event.inputs.profile_limit || '50' }}
+          PROFILE_LIMIT: ${{ github.event.inputs.profile_limit || '0' }}
           CONCURRENCY: ${{ github.event.inputs.concurrency || '3' }}
           WORKFLOW_ID: ${{ vars.WORKFLOW_ID_IMDB_NEWS_SCRAPER }}
         run: npx ts-node --transpile-only src/imdb-news-scraper.ts
