@@ -12,7 +12,7 @@ puppeteer.use(StealthPlugin());
 import type { Browser, Page } from 'puppeteer';
 
 const CONCURRENCY    = parseInt(process.env.CONCURRENCY    || '3');
-const PROFILE_LIMIT  = parseInt(process.env.PROFILE_LIMIT  || '50');
+const PROFILE_LIMIT  = parseInt(process.env.PROFILE_LIMIT  || '0'); // 0 = no limit
 const WORKFLOW_ID    = process.env.WORKFLOW_ID ? parseInt(process.env.WORKFLOW_ID) : null;
 
 // ---------------------------------------------------------------------------
@@ -412,16 +412,19 @@ async function scrapeProfile(browser: Browser, profile: SocialProfile): Promise<
 async function scrapeNews(): Promise<void> {
     const startTime = Date.now();
     console.log('=== IMDb News Scraper ===');
-    console.log(`Concurrency: ${CONCURRENCY} | Batch: ${PROFILE_LIMIT} profiles\n`);
+    console.log(`Concurrency: ${CONCURRENCY} | Batch: ${PROFILE_LIMIT > 0 ? PROFILE_LIMIT : 'all'} profiles\n`);
 
     await logWorkflowRun('running');
 
-    const { data: profiles, error } = await supabase
+    let query = supabase
         .from('hb_socials')
         .select('id, identifier, linked_talent, type, social_url, checked_imdb_news')
         .like('identifier', 'nm%')
-        .order('checked_imdb_news', { ascending: true, nullsFirst: true })
-        .limit(PROFILE_LIMIT);
+        .order('checked_imdb_news', { ascending: true, nullsFirst: true });
+
+    if (PROFILE_LIMIT > 0) query = query.limit(PROFILE_LIMIT);
+
+    const { data: profiles, error } = await query;
 
     if (error) {
         console.error('Error fetching profiles:', error);
