@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "imdb-enrichment": "ts-node --transpile-only src/imdb-enrichment.ts"
+    "imdb-enrichment":    "ts-node --transpile-only src/imdb-enrichment.ts",
+    "imdb-news-scraper":  "ts-node --transpile-only src/imdb-news-scraper.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "dotenv": "^16.3.1",
-    "i18n-iso-countries": "^7.11.0"
+    "i18n-iso-countries": "^7.11.0",
+    "puppeteer": "^24.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

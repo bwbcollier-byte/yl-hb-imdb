@@ -1,0 +1,81 @@
+name: IMDb News Scraper
+
+on:
+  schedule:
+    # Run every 4 hours — cycles through 50 profiles per run
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      profile_limit:
+        description: "Max profiles to scrape (default: 50)"
+        required: false
+        default: "50"
+        type: string
+      concurrency:
+        description: "Parallel profiles (default: 3)"
+        required: false
+        default: "3"
+        type: string
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Notify Supabase — start
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
+          curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/log_workflow_run" \
+            -H "apikey: $SUPABASE_SERVICE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"p_workflow_id": ${{ vars.WORKFLOW_ID_IMDB_NEWS_SCRAPER }}, "p_status": "running", "p_run_id": "${{ github.run_id }}"}'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install system dependencies for Puppeteer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgbm-dev libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libglib2.0-0 \
+            libasound2 libpango-1.0-0 libcairo2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run IMDb News Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PROFILE_LIMIT: ${{ github.event.inputs.profile_limit || '50' }}
+          CONCURRENCY: ${{ github.event.inputs.concurrency || '3' }}
+          WORKFLOW_ID: ${{ vars.WORKFLOW_ID_IMDB_NEWS_SCRAPER }}
+        run: npx ts-node --transpile-only src/imdb-news-scraper.ts
+
+      - name: Notify Supabase — result
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          DURATION=$(( $(date +%s) - $START_TIME ))
+          STATUS="${{ job.status }}"
+          PAYLOAD=$(printf '{"p_workflow_id": ${{ vars.WORKFLOW_ID_IMDB_NEWS_SCRAPER }}, "p_status": "%s", "p_duration_secs": %s, "p_run_id": "${{ github.run_id }}"}' "$STATUS" "$DURATION")
+          curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/log_workflow_run" \
+            -H "apikey: $SUPABASE_SERVICE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
