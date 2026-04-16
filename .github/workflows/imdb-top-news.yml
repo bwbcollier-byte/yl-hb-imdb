@@ -1,0 +1,46 @@
+name: IMDb Top News Scraper
+
+on:
+  schedule:
+    - cron: "0 8 * * *"  # Daily at 8am UTC
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: 'Number of "50 more" clicks (each loads ~50 articles)'
+        required: false
+        default: "5"
+        type: string
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install system dependencies for Puppeteer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgbm-dev libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libglib2.0-0 \
+            libasound2t64 libpango-1.0-0 libcairo2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run IMDb Top News Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MAX_PAGES: ${{ github.event.inputs.max_pages || '5' }}
+        run: npx ts-node --transpile-only src/imdb-top-news.ts

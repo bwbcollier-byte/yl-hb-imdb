@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "imdb-enrichment": "ts-node --transpile-only src/imdb-enrichment.ts",
-    "imdb-news-scraper": "ts-node --transpile-only src/imdb-news-scraper.ts"
+    "imdb-news-scraper": "ts-node --transpile-only src/imdb-news-scraper.ts",
+    "imdb-top-news": "ts-node --transpile-only src/imdb-top-news.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
