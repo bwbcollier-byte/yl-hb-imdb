@@ -204,20 +204,26 @@ async function run(): Promise<void> {
 
         // 2. Click "50 more" button to load additional articles
         for (let click = 1; click <= MAX_PAGES; click++) {
-            const moreBtn = await page.$('button.ipc-see-more__button');
-            if (!moreBtn) {
-                console.log(`   ℹ️  No more button found after ${click - 1} clicks.`);
-                break;
-            }
-
             try {
                 const prevCount: number = await page.$$eval(
                     '.ipc-list-card--border-line', (els: Element[]) => els.length
                 );
 
-                // Scroll into view and click
-                await page.evaluate((el: Element) => (el as HTMLElement).scrollIntoView(), moreBtn);
-                await moreBtn.click();
+                // Use page.evaluate to find, scroll, and click — avoids Puppeteer's
+                // "not clickable" error on dynamically rendered buttons.
+                const clicked: boolean = await page.evaluate(() => {
+                    const btn = document.querySelector('button.ipc-see-more__button') as HTMLElement | null;
+                    if (!btn) return false;
+                    btn.scrollIntoView({ block: 'center' });
+                    btn.click();
+                    return true;
+                });
+
+                if (!clicked) {
+                    console.log(`   ℹ️  No more button found after ${click - 1} clicks.`);
+                    break;
+                }
+
                 console.log(`   📄 Clicked "50 more" (${click}/${MAX_PAGES}) — had ${prevCount} articles...`);
 
                 // Wait for new cards to appear
@@ -234,9 +240,15 @@ async function run(): Promise<void> {
             }
         }
 
-        // 3. Extract all visible articles
-        const allArticles = await extractArticles(page);
-        console.log(`\n📦 Extracted ${allArticles.length} total articles from the page.`);
+        // 3. Extract all visible articles and deduplicate by source_link
+        const rawArticles = await extractArticles(page);
+        const seenLinks = new Set<string>();
+        const allArticles = rawArticles.filter(a => {
+            if (!a.link || seenLinks.has(a.link)) return false;
+            seenLinks.add(a.link);
+            return true;
+        });
+        console.log(`\n📦 Extracted ${rawArticles.length} articles (${allArticles.length} unique) from the page.`);
 
         // 4. Filter out articles we already have
         const allLinks = allArticles.map(a => a.link).filter(Boolean);
