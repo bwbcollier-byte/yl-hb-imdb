@@ -15,6 +15,18 @@ const CONCURRENCY    = parseInt(process.env.CONCURRENCY    || '3');
 const PROFILE_LIMIT  = parseInt(process.env.PROFILE_LIMIT  || '0'); // 0 = no limit
 const WORKFLOW_ID    = process.env.WORKFLOW_ID ? parseInt(process.env.WORKFLOW_ID) : null;
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+async function withRetry<T>(fn: () => Promise<{ data: T; error: any }>, attempts = 3, delayMs = 3000): Promise<{ data: T; error: any }> {
+    let last: { data: T; error: any } = { data: null as any, error: null };
+    for (let i = 1; i <= attempts; i++) {
+        if (i > 1) await sleep(delayMs);
+        last = await fn();
+        if (!last.error) return last;
+        console.warn(`   ⚠️  Supabase attempt ${i}/${attempts} failed: ${last.error.message}`);
+    }
+    return last;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -416,15 +428,12 @@ async function scrapeNews(): Promise<void> {
 
     await logWorkflowRun('running');
 
-    let query = supabase
+    const { data: profiles, error } = await withRetry(() => supabase
         .from('hb_socials')
         .select('id, identifier, linked_talent, type, social_url, checked_imdb_news')
         .like('identifier', 'nm%')
-        .order('checked_imdb_news', { ascending: true, nullsFirst: true });
-
-    query = query.limit(PROFILE_LIMIT > 0 ? PROFILE_LIMIT : 5000); // Supabase defaults to 1000 without explicit limit
-
-    const { data: profiles, error } = await query;
+        .order('checked_imdb_news', { ascending: true, nullsFirst: true })
+        .limit(PROFILE_LIMIT > 0 ? PROFILE_LIMIT : 5000)); // Supabase defaults to 1000 without explicit limit
 
     if (error) {
         console.error('Error fetching profiles:', error);
