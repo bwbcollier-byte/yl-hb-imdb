@@ -293,11 +293,9 @@ async function run(): Promise<void> {
                     published:         pubDate,
                     status:            'published',
                     public_visible:    true,
-                    tagged_talent:     talentUuids,
-                    tagged_media:      mediaUuids,
-                    linked_talent_ids: rawNmIds,
-                    linked_media_ids:  rawTtIds,
-                    internal_notes:    item.imgNote ? [item.imgNote] : [],
+                    tagged_talent:  talentUuids,
+                    tagged_media:   mediaUuids,
+                    internal_notes: item.imgNote ? [item.imgNote] : [],
                 };
             });
 

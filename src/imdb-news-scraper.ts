@@ -294,7 +294,7 @@ async function scrapeProfile(browser: Browser, profile: SocialProfile): Promise<
             allTtIds.length
                 ? supabase.from('hb_media').select('id, soc_imdb_id').in('soc_imdb_id', allTtIds)
                 : Promise.resolve({ data: [] as any[] }),
-            supabase.from('news').select('id, source_link, tagged_talent, tagged_media, linked_talent_ids, linked_media_ids, internal_notes').in('source_link', allLinks),
+            supabase.from('news').select('id, source_link, tagged_talent, tagged_media, internal_notes').in('source_link', allLinks),
         ]);
 
         // O(1) lookup maps
@@ -329,27 +329,21 @@ async function scrapeProfile(browser: Browser, profile: SocialProfile): Promise<
             const existing = existingMap[item.link];
 
             if (existing) {
-                const combinedTalent = [...new Set([...(existing.tagged_talent    || []), ...newTagsTalent])];
-                const combinedMedia  = [...new Set([...(existing.tagged_media     || []), ...newTagsMedia])];
-                const combinedNmIds  = [...new Set([...(existing.linked_talent_ids || []), ...rawNmIds])];
-                const combinedTtIds  = [...new Set([...(existing.linked_media_ids  || []), ...rawTtIds])];
-                const combinedNotes  = [...new Set([...(existing.internal_notes    || []), ...newNotes])];
+                const combinedTalent = [...new Set([...(existing.tagged_talent || []), ...newTagsTalent])];
+                const combinedMedia  = [...new Set([...(existing.tagged_media  || []), ...newTagsMedia])];
+                const combinedNotes  = [...new Set([...(existing.internal_notes || []), ...newNotes])];
 
                 const changed =
-                    combinedTalent.length !== (existing.tagged_talent    || []).length ||
-                    combinedMedia.length  !== (existing.tagged_media     || []).length ||
-                    combinedNmIds.length  !== (existing.linked_talent_ids || []).length ||
-                    combinedTtIds.length  !== (existing.linked_media_ids  || []).length ||
-                    combinedNotes.length  !== (existing.internal_notes    || []).length;
+                    combinedTalent.length !== (existing.tagged_talent  || []).length ||
+                    combinedMedia.length  !== (existing.tagged_media   || []).length ||
+                    combinedNotes.length  !== (existing.internal_notes || []).length;
 
                 if (changed) {
                     toUpdate.push({
-                        id:                existing.id,
-                        tagged_talent:     combinedTalent,
-                        tagged_media:      combinedMedia,
-                        linked_talent_ids: combinedNmIds,
-                        linked_media_ids:  combinedTtIds,
-                        internal_notes:    combinedNotes,
+                        id:            existing.id,
+                        tagged_talent: combinedTalent,
+                        tagged_media:  combinedMedia,
+                        internal_notes: combinedNotes,
                     });
                 }
             } else {
@@ -363,11 +357,9 @@ async function scrapeProfile(browser: Browser, profile: SocialProfile): Promise<
                     published:         pubDateIso,
                     status:            'in progress',
                     public_visible:    true,
-                    tagged_talent:     newTagsTalent,
-                    tagged_media:      newTagsMedia,
-                    linked_talent_ids: rawNmIds,
-                    linked_media_ids:  rawTtIds,
-                    internal_notes:    newNotes,
+                    tagged_talent:  newTagsTalent,
+                    tagged_media:   newTagsMedia,
+                    internal_notes: newNotes,
                 });
             }
         }
@@ -383,11 +375,9 @@ async function scrapeProfile(browser: Browser, profile: SocialProfile): Promise<
         for (const upd of toUpdate) {
             const { error } = await supabase.from('news')
                 .update({
-                    tagged_talent:     upd.tagged_talent,
-                    tagged_media:      upd.tagged_media,
-                    linked_talent_ids: upd.linked_talent_ids,
-                    linked_media_ids:  upd.linked_media_ids,
-                    internal_notes:    upd.internal_notes,
+                    tagged_talent:  upd.tagged_talent,
+                    tagged_media:   upd.tagged_media,
+                    internal_notes: upd.internal_notes,
                 })
                 .eq('id', upd.id);
             if (error) console.error(`  [ERR] ${identifier} update ${upd.id}:`, error.message);
