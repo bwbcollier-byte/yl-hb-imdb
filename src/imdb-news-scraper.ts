@@ -432,6 +432,7 @@ async function scrapeNews(): Promise<void> {
         .from('hb_socials')
         .select('id, identifier, linked_talent, type, social_url, checked_imdb_news')
         .like('identifier', 'nm%')
+        .eq('type', 'IMDB')
         .order('checked_imdb_news', { ascending: true, nullsFirst: true })
         .limit(PROFILE_LIMIT > 0 ? PROFILE_LIMIT : 5000)); // Supabase defaults to 1000 without explicit limit
 
