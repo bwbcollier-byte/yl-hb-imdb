@@ -58,7 +58,7 @@ jobs:
           STALE_DAYS: "30"
           CONCURRENCY: "4"
           WORKFLOW_ID: ${{ vars.WORKFLOW_ID_IMDB_ENRICHMENT }}
-        run: npx ts-node --transpile-only src/imdb-enrichment.ts
+        run: npx tsx src/imdb-enrichment.ts
 
       - name: Notify Supabase — result
         if: always()

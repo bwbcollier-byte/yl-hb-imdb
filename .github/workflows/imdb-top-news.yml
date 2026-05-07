@@ -50,4 +50,4 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           MAX_PAGES: ${{ github.event.inputs.max_pages || '5' }}
-        run: npx ts-node --transpile-only src/imdb-top-news.ts
+        run: npx tsx src/imdb-top-news.ts

@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "imdb-enrichment": "ts-node --transpile-only src/imdb-enrichment.ts",
-    "imdb-news-scraper": "ts-node --transpile-only src/imdb-news-scraper.ts",
-    "imdb-top-news": "ts-node --transpile-only src/imdb-top-news.ts"
+    "imdb-enrichment": "tsx src/imdb-enrichment.ts",
+    "imdb-news-scraper": "tsx src/imdb-news-scraper.ts",
+    "imdb-top-news": "tsx src/imdb-top-news.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "tsx": "^4.19.0"
   }
 }

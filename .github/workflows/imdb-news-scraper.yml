@@ -70,7 +70,7 @@ jobs:
           PROFILE_LIMIT: ${{ github.event.inputs.profile_limit || '0' }}
           CONCURRENCY: ${{ github.event.inputs.concurrency || '3' }}
           WORKFLOW_ID: ${{ vars.WORKFLOW_ID_IMDB_NEWS_SCRAPER }}
-        run: npx ts-node --transpile-only src/imdb-news-scraper.ts
+        run: npx tsx src/imdb-news-scraper.ts
 
       - name: Notify Supabase — result
         if: always()
